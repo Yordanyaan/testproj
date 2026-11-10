@@ -38,8 +38,14 @@ describe("Level and Start", () => {
 
   it("below the bottom row is open: with no ground, the Runner falls out of the Level", () => {
     const level = ["......", "..S...", "##...."].join("\n");
-    const { game, events } = run(createGame(level, DEFAULT_SETTINGS), secs(1));
-    expect(game.runner.y).toBeGreaterThan(3 * TILE);
+    let game = createGame(level, DEFAULT_SETTINGS);
+    const events: GameEvent[] = [];
+    while (game.runner.y <= 3 * TILE) {
+      const r = step(game, IDLE, DT);
+      game = r.game;
+      events.push(...r.events);
+    }
+    expect(game.runner.grounded).toBe(false);
     expect(events).toEqual([]);
   });
 

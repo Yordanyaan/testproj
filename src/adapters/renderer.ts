@@ -1,6 +1,16 @@
 // Thin renderer: draws game state with simple shapes at 640×360.
 // Kept separate from the rules so code-drawn shapes can later be swapped for sprites.
-import { isSolid, RUNNER_H, RUNNER_W, TILE, VIEW_H, VIEW_W, type Game } from "../sim";
+import {
+  isSolid,
+  runnerVisible,
+  RUNNER_H,
+  RUNNER_W,
+  START_HEALTH,
+  TILE,
+  VIEW_H,
+  VIEW_W,
+  type Game,
+} from "../sim";
 
 const COLORS = {
   sky: "#120a1f",
@@ -8,6 +18,9 @@ const COLORS = {
   tileEdge: "#ff2fa8",
   runner: "#1b1b2e",
   visor: "#38f3ff",
+  health: "#38f3ff",
+  healthLost: "#2a2a44",
+  failure: "#ff2fa8",
 };
 
 export interface Renderer {
@@ -58,14 +71,45 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
         }
       }
 
-      const rx = Math.round(runner.x);
-      const ry = Math.round(runner.y);
-      ctx.fillStyle = COLORS.runner;
-      ctx.fillRect(rx, ry, RUNNER_W, RUNNER_H);
-      ctx.fillStyle = COLORS.visor;
-      ctx.fillRect(runner.facing > 0 ? rx + 6 : rx, ry + 5, 6, 3);
+      if (runnerVisible(game)) {
+        const rx = Math.round(runner.x);
+        const ry = Math.round(runner.y);
+        ctx.fillStyle = COLORS.runner;
+        ctx.fillRect(rx, ry, RUNNER_W, RUNNER_H);
+        ctx.fillStyle = COLORS.visor;
+        ctx.fillRect(runner.facing > 0 ? rx + 6 : rx, ry + 5, 6, 3);
+      }
 
       ctx.restore();
+
+      drawHealth(ctx, game.health);
+      if (game.phase === "failed") drawSystemFailure(ctx);
     },
   };
+}
+
+/** Health as neon bars at the top left: lit for each Health left, dim for each lost. */
+function drawHealth(ctx: CanvasRenderingContext2D, health: number): void {
+  for (let i = 0; i < START_HEALTH; i++) {
+    const lit = i < health;
+    const x = 12 + i * 18;
+    ctx.fillStyle = lit ? COLORS.health : COLORS.healthLost;
+    ctx.shadowColor = COLORS.health;
+    ctx.shadowBlur = lit ? 8 : 0;
+    ctx.fillRect(x, 12, 14, 6);
+  }
+  ctx.shadowBlur = 0;
+}
+
+function drawSystemFailure(ctx: CanvasRenderingContext2D): void {
+  ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  ctx.font = "bold 32px monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.shadowColor = COLORS.failure;
+  ctx.shadowBlur = 12;
+  ctx.fillStyle = COLORS.failure;
+  ctx.fillText("SYSTEM FAILURE", VIEW_W / 2, VIEW_H / 2);
+  ctx.shadowBlur = 0;
 }
