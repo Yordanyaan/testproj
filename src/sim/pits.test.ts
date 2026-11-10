@@ -153,6 +153,22 @@ describe("Level Failed", () => {
     game = runUntil(game, "level-restarted").game;
     expect(game).toEqual(createGame(LEDGE, DEFAULT_SETTINGS));
   });
+
+  it("Credits collected before the Level was Failed are back after the restart", () => {
+    const level = ["..........", ".S.C.C....", "######...."].join("\n");
+    let game = createGame(level, DEFAULT_SETTINGS);
+    const events: GameEvent[] = [];
+    for (let i = 0; i < 3; i++) {
+      const r = runUntil(game, "pit-fall", { right: true });
+      game = r.game;
+      events.push(...r.events);
+    }
+    expect(events.filter((e) => e.type === "credit-collected")).toHaveLength(2);
+    expect(game.phase).toBe("failed");
+    game = runUntil(game, "level-restarted").game;
+    expect(game.credits.collected).toBe(0);
+    expect(game.credits.remaining).toHaveLength(2);
+  });
 });
 
 describe("Last solid ground", () => {

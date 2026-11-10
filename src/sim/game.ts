@@ -1,4 +1,5 @@
 import { RUNNER_H, RUNNER_W, TILE, VIEW_W } from "./constants";
+import { collectCredits, createCredits, type CreditEvent, type Credits } from "./credits";
 import {
   fellInPit,
   returnToSafeGround,
@@ -26,7 +27,12 @@ export interface Input {
   jumpPressed: boolean;
 }
 
-export type GameEvent = RunnerEvent | HealthEvent | { type: "level-failed" } | { type: "level-restarted" };
+export type GameEvent =
+  | RunnerEvent
+  | CreditEvent
+  | HealthEvent
+  | { type: "level-failed" }
+  | { type: "level-restarted" };
 
 export interface Camera {
   /** Left edge of the view in Level pixels. */
@@ -39,6 +45,7 @@ export interface Game {
   readonly previousRecord: LevelRecord | undefined;
   readonly runner: Runner;
   readonly camera: Camera;
+  readonly credits: Credits;
   readonly health: number;
   /** Last ground the Runner stood on fully with both feet; a Pit fall returns them here. */
   readonly safeGround: SafeGround;
@@ -69,6 +76,7 @@ function freshRun(level: Level, physics: Physics, previousRecord: LevelRecord | 
     previousRecord,
     runner,
     camera: follow(level, runner),
+    credits: createCredits(level),
     health: START_HEALTH,
     safeGround: { x: runner.x, y: runner.y },
     recovery: 0,
@@ -81,11 +89,13 @@ export function step(game: Game, input: Input, dt: number): { game: Game; events
   if (game.phase === "failed") return stepFailed(game, dt);
   const events: GameEvent[] = [];
   const moved = stepRunner(game.runner, input, game.physics, game.level, dt);
-  events.push(...moved.events);
   const runner = moved.runner;
+  const collected = collectCredits(game.credits, runner);
+  events.push(...moved.events, ...collected.events);
   let next: Game = {
     ...game,
     runner,
+    credits: collected.credits,
     recovery: tickRecovery(game.recovery, dt),
     safeGround: updateSafeGround(game.level, runner, game.safeGround),
   };
