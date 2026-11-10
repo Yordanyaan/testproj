@@ -13,11 +13,9 @@ import { startRecovery, tickRecovery } from "./recovery";
 import { createRunner, stepRunner, type Runner, type RunnerEvent } from "./runner";
 import { derivePhysics, type Physics, type Settings } from "./settings";
 
-/** Best time and most Credits remembered for a Level. Used by later tickets. */
-export interface LevelRecord {
-  bestTime: number;
-  mostCredits: number;
-}
+import { compareWithRecord, type LevelRecord, type NewRecord } from "./record";
+
+export type { LevelRecord, NewRecord } from "./record";
 
 /** Keys down this tick, plus edge flags for presses that happened since the last tick. */
 export interface Input {
@@ -37,7 +35,16 @@ export type GameEvent =
   | HealthEvent
   | { type: "level-failed" }
   | { type: "level-restarted" }
-  | { type: "level-complete"; time: number; collected: number; total: number }
+  | {
+      type: "level-complete";
+      time: number;
+      collected: number;
+      total: number;
+      /** Which parts of this run beat the previous Record (both, with no previous Record). */
+      newRecord: NewRecord;
+      /** The Record from now on: the better of the previous Record and this run, part by part. */
+      record: LevelRecord;
+    }
   | { type: "paused" }
   | { type: "resumed" };
 
@@ -49,7 +56,10 @@ export interface Camera {
 export interface Game {
   readonly level: Level;
   readonly physics: Physics;
-  readonly previousRecord: LevelRecord | undefined;
+  /** The Record: the previous one during play, updated with this run once the Level is complete. */
+  readonly record: LevelRecord | undefined;
+  /** What this run beat on Level Complete; undefined until then. */
+  readonly newRecord: NewRecord | undefined;
   readonly runner: Runner;
   readonly camera: Camera;
   readonly credits: Credits;
@@ -80,13 +90,14 @@ export function createGame(levelText: string, settings: Settings, previousRecord
 }
 
 /** The Level as it is at the beginning: used for the first start and every restart. */
-function freshRun(level: Level, physics: Physics, previousRecord: LevelRecord | undefined, phase: Phase = "playing"): Game {
+function freshRun(level: Level, physics: Physics, record: LevelRecord | undefined, phase: Phase = "playing"): Game {
   const { col, row } = level.start;
   const runner = createRunner(col * TILE + (TILE - RUNNER_W) / 2, (row + 1) * TILE - RUNNER_H);
   return {
     level,
     physics,
-    previousRecord,
+    record,
+    newRecord: undefined,
     runner,
     camera: follow(level, runner),
     credits: createCredits(level),
@@ -142,8 +153,16 @@ function play(game: Game, input: Input, dt: number): StepResult {
     if (next.phase === "failed") events.push({ type: "level-failed" });
   }
   if (next.phase === "playing" && touchesExit(next.level, next.runner)) {
-    next = { ...next, phase: "complete" };
-    events.push({ type: "level-complete", time: next.time, collected: next.credits.collected, total: next.credits.total });
+    const { newRecord, record } = compareWithRecord(next.record, next.time, next.credits.collected);
+    next = { ...next, phase: "complete", record, newRecord };
+    events.push({
+      type: "level-complete",
+      time: next.time,
+      collected: next.credits.collected,
+      total: next.credits.total,
+      newRecord,
+      record,
+    });
   }
   return { game: { ...next, camera: follow(next.level, next.runner) }, events };
 }
@@ -172,7 +191,7 @@ function stepFailed(game: Game, dt: number): StepResult {
 
 /** Back to the beginning of the Level and straight into play: after Level Failed and on play again after Level Complete. */
 function restart(game: Game): StepResult {
-  return { game: freshRun(game.level, game.physics, game.previousRecord), events: [{ type: "level-restarted" }] };
+  return { game: freshRun(game.level, game.physics, game.record), events: [{ type: "level-restarted" }] };
 }
 
 /** Centre the Runner horizontally, never showing past the Level's edges. A Level narrower than the view is centred. */

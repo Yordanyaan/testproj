@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createGame, step, DT, DEFAULT_SETTINGS, type Game, type Input, type GameEvent } from "./index";
+import { createGame, step, DT, DEFAULT_SETTINGS, type Game, type Input, type GameEvent, type LevelRecord } from "./index";
 
 const IDLE: Input = { left: false, right: false, jump: false, jumpPressed: false };
 const ENTER: Partial<Input> = { startPressed: true };
@@ -100,13 +100,14 @@ const TO_EXIT = [
 ].join("\n");
 
 describe("Exit and Level Complete", () => {
-  const start = () => once(createGame(TO_EXIT, DEFAULT_SETTINGS), ENTER).game;
+  const start = (record?: LevelRecord) => once(createGame(TO_EXIT, DEFAULT_SETTINGS, record), ENTER).game;
 
   it("reaching the Exit gives Level Complete with the time and the Credits collected out of the total", () => {
     const { game, events } = runUntil(start(), "level-complete", { right: true });
     expect(game.phase).toBe("complete");
     const complete = events.find((e) => e.type === "level-complete");
-    expect(complete).toEqual({ type: "level-complete", time: game.time, collected: 2, total: 3 });
+    // The Record fields of this event are covered in record.test.ts.
+    expect(complete).toMatchObject({ type: "level-complete", time: game.time, collected: 2, total: 3 });
     // About 11 tiles at up to 9 tiles/s: a little over a second.
     expect(game.time).toBeGreaterThan(1);
     expect(game.time).toBeLessThan(2);
@@ -131,8 +132,8 @@ describe("Exit and Level Complete", () => {
     const done = runUntil(start(), "level-complete", { right: true }).game;
     const { game: again, events } = once(done, ENTER);
     expect(events).toEqual([{ type: "level-restarted" }]);
-    // Runner at Start, every Credit back, timer at 0, playing (no title screen in between).
-    expect(again).toEqual(start());
+    // Runner at Start, every Credit back, timer at 0, playing (no title screen in between), keeping the Record just set.
+    expect(again).toEqual(start(done.record));
     const { game } = run(again, secs(0.5), { right: true });
     expect(game.time).toBeCloseTo(0.5, 5);
   });

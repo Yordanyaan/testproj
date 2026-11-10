@@ -7,6 +7,7 @@ export {
   type GameEvent,
   type Input,
   type LevelRecord,
+  type NewRecord,
   type Phase,
 } from "./game";
 export { START_HEALTH } from "./health";

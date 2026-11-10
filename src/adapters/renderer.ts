@@ -147,8 +147,11 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
           break;
         case "complete":
           drawOverlay(ctx, "LEVEL COMPLETE", [
-            `Credits ${game.credits.collected} / ${game.credits.total}`,
-            `Time ${formatTime(game.time)}`,
+            `Credits ${game.credits.collected} / ${game.credits.total}${game.newRecord?.credits ? "  NEW RECORD!" : ""}`,
+            `Time ${formatTime(game.time)}${game.newRecord?.time ? "  NEW RECORD!" : ""}`,
+            game.record
+              ? `Record: ${formatTime(game.record.bestTime)}, ${game.record.mostCredits} Credits`
+              : "",
             "Press Enter to play again",
           ]);
           break;

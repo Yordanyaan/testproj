@@ -4,7 +4,7 @@ import { DT } from "./constants";
 import type { Settings } from "./settings";
 
 /** A game past the title screen: created, then Enter pressed once. The Level is ready to play, with the timer at 0. */
-export function startedGame(levelText: string, settings: Settings, previousRecord?: LevelRecord): Game {
-  const title = createGame(levelText, settings, previousRecord);
+export function startedGame(levelText: string, settings: Settings, record?: LevelRecord): Game {
+  const title = createGame(levelText, settings, record);
   return step(title, { left: false, right: false, jump: false, jumpPressed: false, startPressed: true }, DT).game;
 }
