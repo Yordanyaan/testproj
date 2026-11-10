@@ -7,11 +7,13 @@ export interface Level {
   /** solid[row][col] */
   solid: readonly (readonly boolean[])[];
   start: { col: number; row: number };
+  /** Tiles holding a Credit (`C`), in reading order. */
+  credits: readonly { col: number; row: number }[];
 }
 
 /**
  * Parse a Level text grid, one character per tile.
- * `#` solid; `S` Start; anything else (`.`, space, not-yet-supported things) is empty.
+ * `#` solid; `S` Start; `C` Credit (an empty tile holding a Credit); anything else (`.`, space, not-yet-supported things) is empty.
  * Rows shorter than the widest row are padded with empty tiles.
  */
 export function parseLevel(text: string): Level {
@@ -20,6 +22,7 @@ export function parseLevel(text: string): Level {
   const rows = lines.length;
   const cols = Math.max(0, ...lines.map((l) => l.length));
   let start: Level["start"] | null = null;
+  const credits: { col: number; row: number }[] = [];
   const solid = lines.map((line, row) => {
     const out: boolean[] = [];
     for (let col = 0; col < cols; col++) {
@@ -28,12 +31,13 @@ export function parseLevel(text: string): Level {
         if (start) throw new Error("Level has more than one Start (S)");
         start = { col, row };
       }
+      if (ch === "C") credits.push({ col, row });
       out.push(ch === "#");
     }
     return out;
   });
   if (!start) throw new Error("Level has no Start (S)");
-  return { cols, rows, solid, start };
+  return { cols, rows, solid, start, credits };
 }
 
 /** Left and right of the Level are solid; above and below (Pits) are open. */

@@ -1,6 +1,6 @@
 // Thin renderer: draws game state with simple shapes at 640×360.
 // Kept separate from the rules so code-drawn shapes can later be swapped for sprites.
-import { isSolid, RUNNER_H, RUNNER_W, TILE, VIEW_H, VIEW_W, type Game } from "../sim";
+import { CREDIT_SIZE, isSolid, RUNNER_H, RUNNER_W, TILE, VIEW_H, VIEW_W, type Game } from "../sim";
 
 const COLORS = {
   sky: "#120a1f",
@@ -8,6 +8,8 @@ const COLORS = {
   tileEdge: "#ff2fa8",
   runner: "#1b1b2e",
   visor: "#38f3ff",
+  credit: "#ffe14d",
+  hudText: "#38f3ff",
 };
 
 export interface Renderer {
@@ -58,6 +60,20 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
         }
       }
 
+      // Credits: a glowing yellow diamond in each Credit's touch box.
+      ctx.fillStyle = COLORS.credit;
+      for (const c of game.credits.remaining) {
+        if (c.x + CREDIT_SIZE < camX || c.x > camX + VIEW_W) continue;
+        const half = CREDIT_SIZE / 2;
+        ctx.beginPath();
+        ctx.moveTo(c.x + half, c.y);
+        ctx.lineTo(c.x + CREDIT_SIZE, c.y + half);
+        ctx.lineTo(c.x + half, c.y + CREDIT_SIZE);
+        ctx.lineTo(c.x, c.y + half);
+        ctx.closePath();
+        ctx.fill();
+      }
+
       const rx = Math.round(runner.x);
       const ry = Math.round(runner.y);
       ctx.fillStyle = COLORS.runner;
@@ -66,6 +82,13 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       ctx.fillRect(runner.facing > 0 ? rx + 6 : rx, ry + 5, 6, 3);
 
       ctx.restore();
+
+      // HUD: Credits collected / total, top middle.
+      ctx.fillStyle = COLORS.hudText;
+      ctx.font = "bold 14px monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(`CREDITS ${game.credits.collected} / ${game.credits.total}`, VIEW_W / 2, 8);
     },
   };
 }
