@@ -25,6 +25,10 @@ export interface Input {
   right: boolean;
   jump: boolean;
   jumpPressed: boolean;
+  /** Enter was pressed since the last tick (start / confirm). Optional: absent means not pressed. */
+  startPressed?: boolean;
+  /** P or Esc was pressed since the last tick. Optional: absent means not pressed. */
+  pausePressed?: boolean;
 }
 
 export type GameEvent =
@@ -32,7 +36,10 @@ export type GameEvent =
   | CreditEvent
   | HealthEvent
   | { type: "level-failed" }
-  | { type: "level-restarted" };
+  | { type: "level-restarted" }
+  | { type: "level-complete"; time: number; collected: number; total: number }
+  | { type: "paused" }
+  | { type: "resumed" };
 
 export interface Camera {
   /** Left edge of the view in Level pixels. */
@@ -55,19 +62,25 @@ export interface Game {
   readonly phase: Phase;
   /** Time left before a Failed Level restarts, s. */
   readonly failedTimer: number;
+  /** Seconds of play this run. Starts with the Level and runs only while playing. */
+  readonly time: number;
 }
 
-export type Phase = "playing" | "failed";
+/**
+ * Where the game is in its flow. Only "playing" moves the world and the timer.
+ * title → playing ⇄ paused; playing → failed → playing (restart); playing → complete (Level Complete).
+ */
+export type Phase = "title" | "playing" | "paused" | "failed" | "complete";
 
 /** How long "SYSTEM FAILURE" shows before the Level restarts, s. */
 export const FAILED_SECONDS = 2;
 
 export function createGame(levelText: string, settings: Settings, previousRecord?: LevelRecord): Game {
-  return freshRun(parseLevel(levelText), derivePhysics(settings), previousRecord);
+  return freshRun(parseLevel(levelText), derivePhysics(settings), previousRecord, "title");
 }
 
 /** The Level as it is at the beginning: used for the first start and every restart. */
-function freshRun(level: Level, physics: Physics, previousRecord: LevelRecord | undefined): Game {
+function freshRun(level: Level, physics: Physics, previousRecord: LevelRecord | undefined, phase: Phase = "playing"): Game {
   const { col, row } = level.start;
   const runner = createRunner(col * TILE + (TILE - RUNNER_W) / 2, (row + 1) * TILE - RUNNER_H);
   return {
@@ -80,13 +93,35 @@ function freshRun(level: Level, physics: Physics, previousRecord: LevelRecord | 
     health: START_HEALTH,
     safeGround: { x: runner.x, y: runner.y },
     recovery: 0,
-    phase: "playing",
+    phase,
     failedTimer: 0,
+    time: 0,
   };
 }
 
-export function step(game: Game, input: Input, dt: number): { game: Game; events: GameEvent[] } {
-  if (game.phase === "failed") return stepFailed(game, dt);
+type StepResult = { game: Game; events: GameEvent[] };
+
+export function step(game: Game, input: Input, dt: number): StepResult {
+  switch (game.phase) {
+    case "title":
+      // The tick that starts the Level only changes phase; the world starts moving on the next tick.
+      return { game: input.startPressed ? { ...game, phase: "playing" } : game, events: [] };
+    case "failed":
+      return stepFailed(game, dt);
+    case "complete":
+      // Level Complete: the world and the timer stay frozen until Enter plays again.
+      return input.startPressed ? restart(game) : { game, events: [] };
+    case "paused":
+      // Nothing moves while paused; the pause key resumes.
+      return input.pausePressed ? { game: { ...game, phase: "playing" }, events: [{ type: "resumed" }] } : { game, events: [] };
+    case "playing":
+      if (input.pausePressed) return { game: { ...game, phase: "paused" }, events: [{ type: "paused" }] };
+      return play(game, input, dt);
+  }
+}
+
+/** One tick of play: Runner, Credits, Pits, camera and timer. */
+function play(game: Game, input: Input, dt: number): StepResult {
   const events: GameEvent[] = [];
   const moved = stepRunner(game.runner, input, game.physics, game.level, dt);
   const runner = moved.runner;
@@ -94,6 +129,7 @@ export function step(game: Game, input: Input, dt: number): { game: Game; events
   events.push(...moved.events, ...collected.events);
   let next: Game = {
     ...game,
+    time: game.time + dt,
     runner,
     credits: collected.credits,
     recovery: tickRecovery(game.recovery, dt),
@@ -105,7 +141,19 @@ export function step(game: Game, input: Input, dt: number): { game: Game; events
     events.push({ type: "pit-fall", health: next.health });
     if (next.phase === "failed") events.push({ type: "level-failed" });
   }
+  if (next.phase === "playing" && touchesExit(next.level, next.runner)) {
+    next = { ...next, phase: "complete" };
+    events.push({ type: "level-complete", time: next.time, collected: next.credits.collected, total: next.credits.total });
+  }
   return { game: { ...next, camera: follow(next.level, next.runner) }, events };
+}
+
+/** The Runner overlaps the Exit tile. */
+function touchesExit(level: Level, runner: Runner): boolean {
+  if (!level.exit) return false;
+  const x = level.exit.col * TILE;
+  const y = level.exit.row * TILE;
+  return runner.x < x + TILE && x < runner.x + RUNNER_W && runner.y < y + TILE && y < runner.y + RUNNER_H;
 }
 
 /** −1 Health and start Recovery; at 0 Health the Level is Failed. Shared by Pit falls and (later) Hits. */
@@ -116,9 +164,14 @@ function loseHealth(game: Game): Game {
 }
 
 /** Level Failed: the world is frozen; when the timer runs out the Level restarts from the beginning. */
-function stepFailed(game: Game, dt: number): { game: Game; events: GameEvent[] } {
+function stepFailed(game: Game, dt: number): StepResult {
   const failedTimer = game.failedTimer - dt;
   if (failedTimer > 1e-9) return { game: { ...game, failedTimer }, events: [] };
+  return restart(game);
+}
+
+/** Back to the beginning of the Level and straight into play: after Level Failed and on play again after Level Complete. */
+function restart(game: Game): StepResult {
   return { game: freshRun(game.level, game.physics, game.previousRecord), events: [{ type: "level-restarted" }] };
 }
 
