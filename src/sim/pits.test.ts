@@ -87,14 +87,29 @@ describe("Recovery", () => {
     }
   });
 
-  it("a Pit fall during Recovery still costs Health (the Runner must be put back)", () => {
-    // No ground under the Start: the Runner falls straight into the Pit, again and again.
+  it("a Pit fall during Recovery puts the Runner back but costs no Health and does not restart Recovery", () => {
+    // No ground under the Start: the Runner falls straight into the Pit, again and again (each fall well under 1 s).
     const level = ["..S..", ".....", "....."].join("\n");
-    let { game, events } = runUntil(createGame(level, DEFAULT_SETTINGS), "pit-fall");
+    let { game } = runUntil(createGame(level, DEFAULT_SETTINGS), "pit-fall");
+    const start = createGame(level, DEFAULT_SETTINGS).runner;
+    const recoveryBefore = game.recovery;
+    const r = runUntil(game, "pit-fall");
+    game = r.game;
+    expect(r.events).toEqual([{ type: "pit-fall", health: 2 }]);
     expect(game.health).toBe(2);
-    ({ game, events } = runUntil(game, "pit-fall"));
-    expect(events.map((e) => e.type)).toEqual(["pit-fall"]);
-    expect(game.health).toBe(1);
+    expect(game.runner.x).toBe(start.x);
+    expect(game.runner.y).toBe(start.y);
+    expect(inRecovery(game)).toBe(true);
+    expect(game.recovery).toBeLessThan(recoveryBefore);
+  });
+
+  it("the first Pit fall after Recovery is over costs Health again", () => {
+    const level = ["..S..", ".....", "....."].join("\n");
+    const { events } = runUntil(createGame(level, DEFAULT_SETTINGS), "level-failed", {}, 10);
+    const healths = events.flatMap((e) => (e.type === "pit-fall" ? [e.health] : []));
+    expect(healths[0]).toBe(2);
+    expect(healths.at(-1)).toBe(0);
+    expect(healths.length).toBeGreaterThan(3); // some falls landed during Recovery and were free
   });
 });
 
@@ -102,20 +117,14 @@ describe("Level Failed", () => {
   // No ground under the Start: every fall is a Pit fall.
   const FALLING = ["..S..", ".....", "....."].join("\n");
 
-  function failLevel() {
-    let game = createGame(FALLING, DEFAULT_SETTINGS);
-    const events: GameEvent[] = [];
-    for (let i = 0; i < 3; i++) {
-      const r = runUntil(game, "pit-fall");
-      game = r.game;
-      events.push(...r.events);
-    }
-    return { game, events };
-  }
+  /** Keep falling until the Level is Failed. Falls during Recovery are free, so it takes more than three. */
+  const failLevel = () => runUntil(createGame(FALLING, DEFAULT_SETTINGS), "level-failed", {}, 10);
 
-  it("the third Pit fall brings Health to 0 and the Level is Failed", () => {
+  it("the third Pit fall that costs Health brings it to 0 and the Level is Failed", () => {
     const { game, events } = failLevel();
-    expect(events.map((e) => e.type)).toEqual(["pit-fall", "pit-fall", "pit-fall", "level-failed"]);
+    const healths = events.flatMap((e) => (e.type === "pit-fall" ? [e.health] : []));
+    expect([...new Set(healths)]).toEqual([2, 1, 0]);
+    expect(events.slice(-2)).toEqual([{ type: "pit-fall", health: 0 }, { type: "level-failed" }]);
     expect(game.health).toBe(0);
     expect(game.phase).toBe("failed");
   });
@@ -149,20 +158,14 @@ describe("Level Failed", () => {
 
   it("a restarted Level is reset after a run that went further (Runner back at the Start)", () => {
     let game = createGame(LEDGE, DEFAULT_SETTINGS);
-    for (let i = 0; i < 3; i++) game = runUntil(game, "pit-fall", { right: true }).game;
+    game = runUntil(game, "level-failed", { right: true }, 10).game;
     game = runUntil(game, "level-restarted").game;
     expect(game).toEqual(createGame(LEDGE, DEFAULT_SETTINGS));
   });
 
   it("Credits collected before the Level was Failed are back after the restart", () => {
     const level = ["..........", ".S.C.C....", "######...."].join("\n");
-    let game = createGame(level, DEFAULT_SETTINGS);
-    const events: GameEvent[] = [];
-    for (let i = 0; i < 3; i++) {
-      const r = runUntil(game, "pit-fall", { right: true });
-      game = r.game;
-      events.push(...r.events);
-    }
+    let { game, events } = runUntil(createGame(level, DEFAULT_SETTINGS), "level-failed", { right: true }, 10);
     expect(events.filter((e) => e.type === "credit-collected")).toHaveLength(2);
     expect(game.phase).toBe("failed");
     game = runUntil(game, "level-restarted").game;

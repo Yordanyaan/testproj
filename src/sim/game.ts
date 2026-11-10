@@ -1,5 +1,7 @@
 import { RUNNER_H, RUNNER_W, TILE, VIEW_W } from "./constants";
+import { findContacts, knockback, KNOCKBACK_STUN, stompBounce, type CombatEvent } from "./combat";
 import { collectCredits, createCredits, type CreditEvent, type Credits } from "./credits";
+import { createEnemies, moveEnemies, type Enemy } from "./enemies";
 import {
   fellInPit,
   returnToSafeGround,
@@ -9,7 +11,7 @@ import {
   type SafeGround,
 } from "./health";
 import { levelWidth, parseLevel, type Level } from "./level";
-import { startRecovery, tickRecovery } from "./recovery";
+import { inRecovery, startRecovery, tickRecovery } from "./recovery";
 import { createRunner, stepRunner, type Runner, type RunnerEvent } from "./runner";
 import { derivePhysics, type Physics, type Settings } from "./settings";
 
@@ -31,6 +33,7 @@ export type GameEvent =
   | RunnerEvent
   | CreditEvent
   | HealthEvent
+  | CombatEvent
   | { type: "level-failed" }
   | { type: "level-restarted" };
 
@@ -46,11 +49,15 @@ export interface Game {
   readonly runner: Runner;
   readonly camera: Camera;
   readonly credits: Credits;
+  /** Enemies not defeated yet this run. */
+  readonly enemies: readonly Enemy[];
   readonly health: number;
   /** Last ground the Runner stood on fully with both feet; a Pit fall returns them here. */
   readonly safeGround: SafeGround;
   /** Recovery time left, s; 0 when not in Recovery. See recovery.ts. */
   readonly recovery: number;
+  /** Time left of a Hit's knockback stun, when input is ignored, s; 0 when not stunned. */
+  readonly stun: number;
   /** "failed": Level Failed, "SYSTEM FAILURE" shows and the world is frozen until the restart. */
   readonly phase: Phase;
   /** Time left before a Failed Level restarts, s. */
@@ -77,9 +84,11 @@ function freshRun(level: Level, physics: Physics, previousRecord: LevelRecord | 
     runner,
     camera: follow(level, runner),
     credits: createCredits(level),
+    enemies: createEnemies(level),
     health: START_HEALTH,
     safeGround: { x: runner.x, y: runner.y },
     recovery: 0,
+    stun: 0,
     phase: "playing",
     failedTimer: 0,
   };
@@ -88,27 +97,50 @@ function freshRun(level: Level, physics: Physics, previousRecord: LevelRecord | 
 export function step(game: Game, input: Input, dt: number): { game: Game; events: GameEvent[] } {
   if (game.phase === "failed") return stepFailed(game, dt);
   const events: GameEvent[] = [];
-  const moved = stepRunner(game.runner, input, game.physics, game.level, dt);
-  const runner = moved.runner;
+  const enemiesMoved = moveEnemies(game.enemies, game.level, dt);
+  const stunned = game.stun > 0;
+  const moved = stepRunner(game.runner, input, game.physics, game.level, dt, stunned);
+  let runner = moved.runner;
+  events.push(...moved.events);
+
+  // Stomps first; any other touch is a Hit unless the Runner is in Recovery.
+  const contacts = findContacts(enemiesMoved, game.runner, runner);
+  if (contacts.stomped.length > 0) {
+    runner = stompBounce(runner, contacts.stomped, input.jump && !stunned, game.physics);
+    events.push({ type: "stomp" });
+  }
+
   const collected = collectCredits(game.credits, runner);
-  events.push(...moved.events, ...collected.events);
+  events.push(...collected.events);
   let next: Game = {
     ...game,
     runner,
     credits: collected.credits,
+    enemies: contacts.enemies,
     recovery: tickRecovery(game.recovery, dt),
+    stun: tickRecovery(game.stun, dt),
     safeGround: updateSafeGround(game.level, runner, game.safeGround),
   };
-  // A Pit fall always costs Health, even in Recovery: the Runner has to be put back somewhere.
+  if (contacts.stomped.length === 0 && contacts.touched && !inRecovery(next)) {
+    const runner = knockback(next.runner, contacts.touched, next.physics);
+    next = loseHealth({ ...next, runner, stun: KNOCKBACK_STUN });
+    events.push({ type: "hit", health: next.health });
+    if (next.phase === "failed") {
+      events.push({ type: "level-failed" });
+      return { game: { ...next, camera: follow(next.level, next.runner) }, events };
+    }
+  }
+  // A Pit fall is a Hit: it always puts the Runner back, but during Recovery it costs nothing.
   if (fellInPit(next.level, next.runner)) {
-    next = loseHealth({ ...next, runner: returnToSafeGround(next.runner, next.safeGround) });
+    next = { ...next, runner: returnToSafeGround(next.runner, next.safeGround) };
+    if (!inRecovery(next)) next = loseHealth(next);
     events.push({ type: "pit-fall", health: next.health });
     if (next.phase === "failed") events.push({ type: "level-failed" });
   }
   return { game: { ...next, camera: follow(next.level, next.runner) }, events };
 }
 
-/** −1 Health and start Recovery; at 0 Health the Level is Failed. Shared by Pit falls and (later) Hits. */
+/** −1 Health and start Recovery; at 0 Health the Level is Failed. Shared by Pit falls and Enemy Hits. */
 function loseHealth(game: Game): Game {
   const health = Math.max(0, game.health - 1);
   if (health > 0) return { ...game, health, recovery: startRecovery() };

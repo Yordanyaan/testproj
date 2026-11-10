@@ -1,5 +1,17 @@
 import { TILE } from "./constants";
 
+/** The kinds of Enemy a Level grid can place. */
+export type EnemyKind = "patrol-bot";
+/** Grid character for each Enemy kind. The Hover Drone (`D`) joins here in its own ticket. */
+const ENEMY_CHARS: Readonly<Record<string, EnemyKind>> = { P: "patrol-bot" };
+
+/** A tile holding an Enemy at the start of a run. */
+export interface EnemyPlacement {
+  kind: EnemyKind;
+  col: number;
+  row: number;
+}
+
 /** A parsed Level: a solid/empty tile grid plus the Start tile. */
 export interface Level {
   cols: number;
@@ -9,11 +21,14 @@ export interface Level {
   start: { col: number; row: number };
   /** Tiles holding a Credit (`C`), in reading order. */
   credits: readonly { col: number; row: number }[];
+  /** Tiles holding an Enemy (`P` Patrol Bot), in reading order. */
+  enemies: readonly EnemyPlacement[];
 }
 
 /**
  * Parse a Level text grid, one character per tile.
- * `#` solid; `S` Start; `C` Credit (an empty tile holding a Credit); anything else (`.`, space, not-yet-supported things) is empty.
+ * `#` solid; `S` Start; `C` Credit and `P` Patrol Bot (empty tiles holding that thing);
+ * anything else (`.`, space, not-yet-supported things) is empty.
  * Rows shorter than the widest row are padded with empty tiles.
  */
 export function parseLevel(text: string): Level {
@@ -23,6 +38,7 @@ export function parseLevel(text: string): Level {
   const cols = Math.max(0, ...lines.map((l) => l.length));
   let start: Level["start"] | null = null;
   const credits: { col: number; row: number }[] = [];
+  const enemies: EnemyPlacement[] = [];
   const solid = lines.map((line, row) => {
     const out: boolean[] = [];
     for (let col = 0; col < cols; col++) {
@@ -32,12 +48,14 @@ export function parseLevel(text: string): Level {
         start = { col, row };
       }
       if (ch === "C") credits.push({ col, row });
+      const kind = ENEMY_CHARS[ch];
+      if (kind) enemies.push({ kind, col, row });
       out.push(ch === "#");
     }
     return out;
   });
   if (!start) throw new Error("Level has no Start (S)");
-  return { cols, rows, solid, start, credits };
+  return { cols, rows, solid, start, credits, enemies };
 }
 
 /** Left and right of the Level are solid; above and below (Pits) are open. */

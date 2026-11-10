@@ -80,15 +80,23 @@ function resolveY(s: Runner, level: Level): boolean {
   return false;
 }
 
+const NO_INPUT: RunnerInput = { left: false, right: false, jump: false, jumpPressed: false };
+
+/**
+ * Move the Runner by one tick. While `stunned` (the start of a Hit's knockback) input is ignored
+ * and the Runner keeps their speed in the air, only slowing down on the ground.
+ */
 export function stepRunner(
   prev: Runner,
-  input: RunnerInput,
+  playerInput: RunnerInput,
   P: Physics,
   level: Level,
   dt: number,
+  stunned = false,
 ): { runner: Runner; events: RunnerEvent[] } {
   const s: Runner = { ...prev };
   const events: RunnerEvent[] = [];
+  const input = stunned ? NO_INPUT : playerInput;
 
   const dir = (input.right ? 1 : 0) - (input.left ? 1 : 0);
   if (dir !== 0) s.facing = dir > 0 ? 1 : -1;
@@ -100,6 +108,7 @@ export function stepRunner(
   let rate = dir !== 0 ? P.accel : P.decel;
   if (dir !== 0 && s.vx !== 0 && Math.sign(s.vx) !== dir) rate = P.accel + P.decel;
   if (!s.grounded) rate *= P.airControl;
+  if (stunned) rate = s.grounded ? P.decel : 0;
   s.vx = approach(s.vx, dir * P.topSpeed, rate * dt);
 
   // Jump, with early-jump memory and late-jump grace.

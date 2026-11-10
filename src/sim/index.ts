@@ -13,5 +13,6 @@ export { START_HEALTH } from "./health";
 export { DEFAULT_SETTINGS, type Settings } from "./settings";
 export { DT, TILE, RUNNER_W, RUNNER_H, VIEW_W, VIEW_H, CREDIT_SIZE } from "./constants";
 export type { Credit, Credits } from "./credits";
+export { PATROL_BOT_W, PATROL_BOT_H, type Enemy, type EnemyBox, type PatrolBot } from "./enemies";
 export { isSolid, type Level } from "./level";
 export { inRecovery, runnerVisible } from "./recovery";

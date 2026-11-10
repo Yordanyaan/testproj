@@ -20,6 +20,8 @@ const COLORS = {
   runner: "#1b1b2e",
   visor: "#38f3ff",
   credit: "#ffe14d",
+  patrolBot: "#ff3b3b",
+  patrolBotEye: "#ffe0e0",
   hudText: "#38f3ff",
   health: "#38f3ff",
   healthLost: "#2a2a44",
@@ -86,6 +88,20 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
         ctx.lineTo(c.x, c.y + half);
         ctx.closePath();
         ctx.fill();
+      }
+
+      // Enemies: Patrol Bots are glowing red boxes with an eye looking the way they walk.
+      for (const e of game.enemies) {
+        if (e.x + e.w < camX || e.x > camX + VIEW_W) continue;
+        const x = Math.round(e.x);
+        const y = Math.round(e.y);
+        ctx.shadowColor = COLORS.patrolBot;
+        ctx.shadowBlur = 8;
+        ctx.fillStyle = COLORS.patrolBot;
+        ctx.fillRect(x, y + 2, e.w, e.h - 2);
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = COLORS.patrolBotEye;
+        ctx.fillRect(e.dir > 0 ? x + e.w - 6 : x + 2, y + 5, 4, 2);
       }
 
       if (runnerVisible(game)) {
