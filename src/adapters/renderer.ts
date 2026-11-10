@@ -26,7 +26,18 @@ const COLORS = {
   health: "#38f3ff",
   healthLost: "#2a2a44",
   failure: "#ff2fa8",
+  exit: "#ff2fa8",
+  overlayTitle: "#ff2fa8",
+  overlayText: "#38f3ff",
 };
+
+/** A time as m:ss.cc. */
+function formatTime(seconds: number): string {
+  const cs = Math.floor(seconds * 100);
+  const m = Math.floor(cs / 6000);
+  const s = Math.floor((cs % 6000) / 100);
+  return `${m}:${String(s).padStart(2, "0")}.${String(cs % 100).padStart(2, "0")}`;
+}
 
 export interface Renderer {
   draw(game: Game): void;
@@ -74,6 +85,18 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
             ctx.fillRect(x, y, TILE, 2);
           }
         }
+      }
+
+      // Exit: a glowing pink neon doorway, two tiles tall, standing on the Exit tile.
+      if (level.exit) {
+        const x = level.exit.col * TILE + 2;
+        const bottom = (level.exit.row + 1) * TILE;
+        ctx.strokeStyle = COLORS.exit;
+        ctx.shadowColor = COLORS.exit;
+        ctx.shadowBlur = 10;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, bottom - 2 * TILE, TILE - 4, 2 * TILE);
+        ctx.shadowBlur = 0;
       }
 
       // Credits: a glowing yellow diamond in each Credit's touch box.
@@ -124,7 +147,31 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       ctx.textBaseline = "top";
       ctx.fillText(`CREDITS ${game.credits.collected} / ${game.credits.total}`, VIEW_W / 2, 8);
 
-      if (game.phase === "failed") drawSystemFailure(ctx);
+      // Timer, top right.
+      ctx.textAlign = "right";
+      ctx.fillText(formatTime(game.time), VIEW_W - 12, 8);
+
+      switch (game.phase) {
+        case "failed":
+          drawSystemFailure(ctx);
+          break;
+        case "title":
+          drawOverlay(ctx, "CYBERPUNK PLATFORMER", ["Press Enter to start"]);
+          break;
+        case "paused":
+          drawOverlay(ctx, "Paused", ["P or Esc to resume"]);
+          break;
+        case "complete":
+          drawOverlay(ctx, "LEVEL COMPLETE", [
+            `Credits ${game.credits.collected} / ${game.credits.total}${game.newRecord?.credits ? "  NEW RECORD!" : ""}`,
+            `Time ${formatTime(game.time)}${game.newRecord?.time ? "  NEW RECORD!" : ""}`,
+            game.record
+              ? `Record: ${formatTime(game.record.bestTime)}, ${game.record.mostCredits} Credits`
+              : "",
+            "Press Enter to play again",
+          ]);
+          break;
+      }
     },
   };
 }
@@ -140,6 +187,24 @@ function drawHealth(ctx: CanvasRenderingContext2D, health: number): void {
     ctx.fillRect(x, 12, 14, 6);
   }
   ctx.shadowBlur = 0;
+}
+
+/** A dimmed screen with a glowing heading and lines of text under it. */
+function drawOverlay(ctx: CanvasRenderingContext2D, heading: string, lines: string[]): void {
+  ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const top = VIEW_H / 2 - (lines.length * 22) / 2 - 12;
+  ctx.font = "bold 32px monospace";
+  ctx.shadowColor = COLORS.overlayTitle;
+  ctx.shadowBlur = 12;
+  ctx.fillStyle = COLORS.overlayTitle;
+  ctx.fillText(heading, VIEW_W / 2, top);
+  ctx.shadowBlur = 0;
+  ctx.font = "bold 16px monospace";
+  ctx.fillStyle = COLORS.overlayText;
+  lines.forEach((line, i) => ctx.fillText(line, VIEW_W / 2, top + 40 + i * 22));
 }
 
 function drawSystemFailure(ctx: CanvasRenderingContext2D): void {

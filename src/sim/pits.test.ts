@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  createGame,
   step,
   inRecovery,
   runnerVisible,
@@ -12,6 +11,8 @@ import {
   type Input,
   type GameEvent,
 } from "./index";
+// These tests are about play, so every game starts past the title screen.
+import { startedGame as createGame } from "./testing";
 
 const IDLE: Input = { left: false, right: false, jump: false, jumpPressed: false };
 const secs = (s: number) => Math.round(s * 120);

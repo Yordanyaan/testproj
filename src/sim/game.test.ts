@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { createGame, step, DT, TILE, DEFAULT_SETTINGS, type Game, type Input, type GameEvent } from "./index";
+import { step, DT, TILE, DEFAULT_SETTINGS, type Game, type Input, type GameEvent } from "./index";
+// These tests are about play, so every game starts past the title screen.
+import { startedGame as createGame } from "./testing";
 import { TEST_LEVEL } from "../levels/test-level";
 
 // Runner size from the spec: 12×24 px.

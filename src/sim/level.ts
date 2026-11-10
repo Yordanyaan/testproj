@@ -23,11 +23,13 @@ export interface Level {
   credits: readonly { col: number; row: number }[];
   /** Tiles holding an Enemy (`P` Patrol Bot), in reading order. */
   enemies: readonly EnemyPlacement[];
+  /** The Exit tile (`E`); null when the Level has none (small test Levels). */
+  exit: { col: number; row: number } | null;
 }
 
 /**
  * Parse a Level text grid, one character per tile.
- * `#` solid; `S` Start; `C` Credit and `P` Patrol Bot (empty tiles holding that thing);
+ * `#` solid; `S` Start; `C` Credit, `P` Patrol Bot and `E` Exit (empty tiles holding that thing);
  * anything else (`.`, space, not-yet-supported things) is empty.
  * Rows shorter than the widest row are padded with empty tiles.
  */
@@ -39,6 +41,7 @@ export function parseLevel(text: string): Level {
   let start: Level["start"] | null = null;
   const credits: { col: number; row: number }[] = [];
   const enemies: EnemyPlacement[] = [];
+  let exit: Level["exit"] = null;
   const solid = lines.map((line, row) => {
     const out: boolean[] = [];
     for (let col = 0; col < cols; col++) {
@@ -50,12 +53,16 @@ export function parseLevel(text: string): Level {
       if (ch === "C") credits.push({ col, row });
       const kind = ENEMY_CHARS[ch];
       if (kind) enemies.push({ kind, col, row });
+      if (ch === "E") {
+        if (exit) throw new Error("Level has more than one Exit (E)");
+        exit = { col, row };
+      }
       out.push(ch === "#");
     }
     return out;
   });
   if (!start) throw new Error("Level has no Start (S)");
-  return { cols, rows, solid, start, credits, enemies };
+  return { cols, rows, solid, start, credits, enemies, exit };
 }
 
 /** Left and right of the Level are solid; above and below (Pits) are open. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { startedGame as createGame } from "./testing";
 import {
-  createGame,
   step,
   DT,
   TILE,
@@ -35,6 +35,12 @@ describe("Patrol Bots", () => {
     expect(bot.y + bot.h).toBe(1 * TILE);
     expect(bot.x).toBeGreaterThanOrEqual(6 * TILE);
     expect(bot.x + bot.w).toBeLessThanOrEqual(7 * TILE);
+  });
+
+  it("stand still while the game is paused", () => {
+    const level = ["S.....P...", "##########"].join("\n");
+    const paused = step(createGame(level, DEFAULT_SETTINGS), { ...IDLE, pausePressed: true }, DT).game;
+    expect(run(paused, secs(1)).game.enemies).toEqual(paused.enemies);
   });
 
   /** Where the first Enemy goes over `seconds`: its leftmost x and rightmost right edge, and every y. */

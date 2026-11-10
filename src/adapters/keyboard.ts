@@ -1,7 +1,7 @@
-// Thin keyboard adapter: maps arrow keys / A / D and Space to simulation Input.
+// Thin keyboard adapter: maps arrow keys / A / D, Space, Enter and P / Esc to simulation Input.
 import type { Input } from "../sim";
 
-type Key = "left" | "right" | "jump";
+type Key = "left" | "right" | "jump" | "start" | "pause";
 
 const KEYMAP: Record<string, Key> = {
   ArrowLeft: "left",
@@ -9,6 +9,10 @@ const KEYMAP: Record<string, Key> = {
   ArrowRight: "right",
   KeyD: "right",
   Space: "jump",
+  Enter: "start",
+  NumpadEnter: "start",
+  KeyP: "pause",
+  Escape: "pause",
 };
 
 export interface Keyboard {
@@ -18,14 +22,14 @@ export interface Keyboard {
 
 export function createKeyboard(target: Window): Keyboard {
   const down = new Set<Key>();
-  let jumpPressed = false;
+  const pressed = new Set<Key>();
 
   target.addEventListener("keydown", (e) => {
     const key = KEYMAP[e.code];
     if (!key) return;
     e.preventDefault();
     if (e.repeat) return;
-    if (key === "jump") jumpPressed = true;
+    pressed.add(key);
     down.add(key);
   });
   target.addEventListener("keyup", (e) => {
@@ -40,9 +44,11 @@ export function createKeyboard(target: Window): Keyboard {
         left: down.has("left"),
         right: down.has("right"),
         jump: down.has("jump"),
-        jumpPressed,
+        jumpPressed: pressed.has("jump"),
+        startPressed: pressed.has("start"),
+        pausePressed: pressed.has("pause"),
       };
-      jumpPressed = false;
+      pressed.clear();
       return input;
     },
   };
